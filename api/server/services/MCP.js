@@ -12,6 +12,7 @@ const {
   MCPOAuthHandler,
   normalizeServerName,
   convertWithResolvedRefs,
+  isMCPDomainAllowed,
 } = require('@librechat/api');
 const {
   Time,
@@ -29,6 +30,7 @@ const {
 const { findToken, createToken, updateToken } = require('~/models');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getLogStores } = require('~/cache');
+const { getAppConfig } = require('./Config');
 
 /**
  * @param {object} params
@@ -275,6 +277,20 @@ async function createMCPTool({
   availableTools,
 }) {
   const [toolName, serverName] = toolKey.split(Constants.mcp_delimiter);
+
+  // Runtime domain validation: check if the server's domain is still allowed
+  const serverConfig = await getMCPServersRegistry().getServerConfig(serverName, user?.id);
+  if (serverConfig?.url) {
+    const appConfig = await getAppConfig();
+    const isDomainAllowed = await isMCPDomainAllowed(
+      serverConfig,
+      appConfig?.mcpSettings?.allowedDomains,
+    );
+    if (!isDomainAllowed) {
+      logger.warn(`[MCP][${serverName}] Domain no longer allowed, skipping tool: ${toolName}`);
+      return undefined;
+    }
+  }
 
   /** @type {LCTool | undefined} */
   let toolDefinition = availableTools?.[toolKey]?.function;
